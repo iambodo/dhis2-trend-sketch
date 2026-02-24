@@ -16,11 +16,12 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
     const [containerWidth, setContainerWidth] = useState(600)
     const [isComplete, setIsComplete] = useState(false)
     const [showTrue, setShowTrue] = useState(false)
+    const [metrics, setMetrics] = useState(null)
     const scalesRef = useRef(null)
     const innerWidthRef = useRef(0)
     const clipIdRef = useRef(null)
 
-    const { periods, values, dataLabel, title, subtitle, loading, error } =
+    const { periods, values, dataLabel, title, subtitle, yAxisRange, loading, error } =
         useAnalyticsData(vizId)
 
     // Notify parent of total period count
@@ -51,11 +52,12 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         setIsComplete(false)
         setShowTrue(false)
+        setMetrics(null)
 
         const { xScale, yScale, innerWidth, innerHeight, clipId } = createChart(
             svgRef.current,
             { labels, values, drawStart },
-            { width: containerWidth, height: CHART_HEIGHT }
+            { width: containerWidth, height: CHART_HEIGHT, yAxisRange }
         )
 
         clipIdRef.current = clipId
@@ -70,13 +72,14 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             innerWidth,
             innerHeight,
             () => {},
-            () => {
+            (_userPoints, m) => {
                 setIsComplete(true)
                 setShowTrue(true)
+                setMetrics(m)
                 revealTrueLine(gRef.current, clipId, innerWidth)
             }
         )
-    }, [periods, values, drawStart, containerWidth])
+    }, [periods, values, drawStart, containerWidth, yAxisRange])
 
     useEffect(() => {
         buildChart()
@@ -87,7 +90,6 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         resetDrawing(gRef.current)
 
-        // Re-hide the clip rect
         if (clipIdRef.current) {
             const clipRect = gRef.current.querySelector(`#${clipIdRef.current} rect`)
             if (clipRect) clipRect.setAttribute('width', '0')
@@ -95,6 +97,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         setIsComplete(false)
         setShowTrue(false)
+        setMetrics(null)
 
         const labels = periods.map(p => p.label)
         const { xScale, yScale } = scalesRef.current
@@ -109,9 +112,10 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             innerWidth,
             innerHeight,
             () => {},
-            () => {
+            (_userPoints, m) => {
                 setIsComplete(true)
                 setShowTrue(true)
+                setMetrics(m)
                 revealTrueLine(gRef.current, clipId, innerWidth)
             }
         )
@@ -159,6 +163,10 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                 {dataLabel && <span className={classes.dataLabel}>{dataLabel}</span>}
             </div>
 
+            <div ref={containerRef} className={classes.svgContainer}>
+                <svg ref={svgRef} className={classes.svg} />
+            </div>
+
             {!editMode && !isComplete && hiddenPeriods > 0 && (
                 <div className={classes.instruction}>
                     Draw the remaining <strong>{hiddenPeriods}</strong> period
@@ -166,20 +174,26 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                 </div>
             )}
 
-            <div ref={containerRef} className={classes.svgContainer}>
-                <svg ref={svgRef} className={classes.svg} />
-            </div>
-
             {isComplete && (
                 <div className={classes.controls}>
-                    <Button onClick={handleReset} secondary small>
-                        Reset drawing
-                    </Button>
-                    {showTrue && (
-                        <span className={classes.revealNote}>
-                            True values revealed.
-                        </span>
+                    {metrics && (
+                        <div className={classes.metrics}>
+                            <span>Euclidean distance: <strong>{metrics.euclidean.toPrecision(2)}</strong></span>
+                            {metrics.pearson != null && (
+                                <span>Pearson correlation: <strong>{metrics.pearson.toPrecision(2)}</strong></span>
+                            )}
+                        </div>
                     )}
+                    <div className={classes.controlsRow}>
+                        <Button onClick={handleReset} secondary small>
+                            Reset drawing
+                        </Button>
+                        {showTrue && (
+                            <span className={classes.revealNote}>
+                                True values revealed.
+                            </span>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

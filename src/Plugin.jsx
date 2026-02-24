@@ -24,14 +24,20 @@ function writeLocalCache(data) {
     }
 }
 
+const DEFAULT_VIZ_ID = 'NxyEVic2BOh'
+const DEFAULT_HIDDEN_PERIODS = 3
+
 function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
+    // When dashboardMode is not provided, use defaults directly
+    const noContext = dashboardMode == null
     const editMode = dashboardMode === 'edit'
-    const [selectedVizId, setSelectedVizId] = useState(null)
-    const [hiddenPeriods, setHiddenPeriods] = useState(3)
+    const [selectedVizId, setSelectedVizId] = useState(noContext ? DEFAULT_VIZ_ID : null)
+    const [hiddenPeriods, setHiddenPeriods] = useState(noContext ? DEFAULT_HIDDEN_PERIODS : 3)
     const [totalPeriods, setTotalPeriods] = useState(0)
 
-    // Restore cached config on mount
+    // Restore cached config on mount (only when dashboard context exists)
     useEffect(() => {
+        if (noContext) return
         if (onCacheableDataLoad) {
             onCacheableDataLoad(cachedData => {
                 if (cachedData?.selectedVizId) {

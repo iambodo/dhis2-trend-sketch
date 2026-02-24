@@ -5,6 +5,8 @@ import { formatPeriodId } from '../utils/periodUtils'
 const VIZ_FIELDS = [
     'id',
     'displayName',
+    'rangeAxisMinValue',
+    'rangeAxisMaxValue',
     'columns[dimension,items[id,displayName]]',
     'rows[dimension,items[id,displayName]]',
     'filters[dimension,items[id,displayName]]',
@@ -39,7 +41,7 @@ function extractDimensions(visualization) {
     }
 }
 
-const EMPTY = { periods: [], values: [], dataLabel: '', title: '', subtitle: '', loading: false, error: null }
+const EMPTY = { periods: [], values: [], dataLabel: '', title: '', subtitle: '', yAxisRange: null, loading: false, error: null }
 
 /**
  * Fetch analytics data for the selected visualization.
@@ -71,6 +73,9 @@ export function useAnalyticsData(vizId) {
             if (cancelled) return
 
             const dims = extractDimensions(visualization)
+            const yAxisRange = (visualization.rangeAxisMinValue != null && visualization.rangeAxisMaxValue != null)
+                ? { min: visualization.rangeAxisMinValue, max: visualization.rangeAxisMaxValue }
+                : null
 
             if (!dims) {
                 setResult({ ...EMPTY, error: new Error('Could not extract dimensions from visualization') })
@@ -121,6 +126,7 @@ export function useAnalyticsData(vizId) {
                     dataLabel: dims.dxName,
                     title: dims.vizName,
                     subtitle: ouMeta?.name || '',
+                    yAxisRange,
                     loading: false,
                     error: null,
                 })

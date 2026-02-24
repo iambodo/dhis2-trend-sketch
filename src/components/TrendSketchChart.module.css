@@ -51,9 +51,22 @@
 
 .controls {
     display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 16px;
+}
+
+.metrics {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: #495057;
+}
+
+.controlsRow {
+    display: flex;
     align-items: center;
     gap: 12px;
-    padding: 8px 16px;
 }
 
 .revealNote {

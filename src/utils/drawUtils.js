@@ -7,14 +7,14 @@ let clipIdCounter = 0
 /**
  * Create the D3 chart inside the given SVG element.
  *
- * @param {SVGSVGElement} svgEl  SVG DOM element to draw into
+ * @param {SVGSVGElement} svgEl
  * @param {{ labels: string[], values: (number|null)[], drawStart: number }} data
- * @param {{ width: number, height: number }} options
+ * @param {{ width: number, height: number, yAxisRange?: {min: number, max: number}|null }} options
  * @returns {{ xScale, yScale, innerWidth, innerHeight, clipId }}
  */
 export function createChart(svgEl, data, options) {
     const { labels, values, drawStart } = data
-    const { width, height } = options
+    const { width, height, yAxisRange } = options
 
     const innerWidth = width - MARGIN.left - MARGIN.right
     const innerHeight = height - MARGIN.top - MARGIN.bottom
@@ -29,14 +29,14 @@ export function createChart(svgEl, data, options) {
         .attr('class', 'chart-g')
         .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
 
-    // Clip path lives inside <g> — coords are in <g> space
+    // Clip path for revealing the true line
     g.append('defs')
         .append('clipPath')
         .attr('id', clipId)
         .append('rect')
         .attr('x', 0)
         .attr('y', -MARGIN.top)
-        .attr('width', 0)   // animated by revealTrueLine
+        .attr('width', 0)
         .attr('height', height)
 
     // Scales
@@ -46,13 +46,22 @@ export function createChart(svgEl, data, options) {
         .range([0, innerWidth])
         .padding(0.5)
 
-    const knownVals = values.filter(v => v != null)
-    const minVal = d3.min(knownVals) ?? 0
-    const maxVal = d3.max(knownVals) ?? 1
-    const pad = (maxVal - minVal) * 0.15 || Math.abs(maxVal) * 0.1 || 1
+    let yDomainMin, yDomainMax
+    if (yAxisRange) {
+        yDomainMin = yAxisRange.min
+        yDomainMax = yAxisRange.max
+    } else {
+        const knownVals = values.filter(v => v != null)
+        const minVal = d3.min(knownVals) ?? 0
+        const maxVal = d3.max(knownVals) ?? 1
+        const pad = (maxVal - minVal) * 0.15 || Math.abs(maxVal) * 0.1 || 1
+        yDomainMin = Math.max(0, minVal - pad)
+        yDomainMax = maxVal + pad
+    }
+
     const yScale = d3
         .scaleLinear()
-        .domain([Math.max(0, minVal - pad), maxVal + pad])
+        .domain([yDomainMin, yDomainMax])
         .range([innerHeight, 0])
         .nice()
 
@@ -72,11 +81,21 @@ export function createChart(svgEl, data, options) {
         .call(d3.axisLeft(yScale).ticks(6))
         .style('font-size', '11px')
 
-    // Divider line
+    // Grey background for drawing area
     if (drawStart > 0 && drawStart < labels.length) {
         const x0 = xScale(labels[drawStart - 1])
         const x1 = xScale(labels[drawStart])
         const divX = (x0 + x1) / 2
+
+        g.append('rect')
+            .attr('class', 'draw-bg')
+            .attr('x', divX)
+            .attr('y', 0)
+            .attr('width', innerWidth - divX)
+            .attr('height', innerHeight)
+            .attr('fill', '#f5f5f5')
+
+        // Divider line
         g.append('line')
             .attr('class', 'divider')
             .attr('x1', divX).attr('x2', divX)
@@ -110,12 +129,12 @@ export function createChart(svgEl, data, options) {
         .attr('cy', d => yScale(d.value))
         .attr('r', 3.5).attr('fill', '#2b6cb0')
 
-    // True (hidden) data — clipped
+    // True (hidden) data — clipped, entirely dashed including connector
     const trueData = labels.slice(drawStart)
         .map((label, i) => ({ label, value: values[drawStart + i] }))
         .filter(d => d.value != null)
 
-    // Connector: last known → first true
+    // Connector: last known → first true (dashed, clipped)
     if (knownData.length > 0 && trueData.length > 0) {
         g.append('path')
             .datum([knownData[knownData.length - 1], trueData[0]])
@@ -123,6 +142,7 @@ export function createChart(svgEl, data, options) {
             .attr('fill', 'none')
             .attr('stroke', '#276749')
             .attr('stroke-width', 2.5)
+            .attr('stroke-dasharray', '6,3')
             .attr('clip-path', `url(#${clipId})`)
             .attr('d', lineGen)
     }
@@ -143,7 +163,34 @@ export function createChart(svgEl, data, options) {
         .attr('r', 3.5).attr('fill', '#276749')
         .attr('clip-path', `url(#${clipId})`)
 
-    // User drawn line (empty)
+    // Value labels: first known value, last known value before hidden
+    const labelOffset = -8
+    if (knownData.length > 0) {
+        // First value
+        g.append('text')
+            .attr('class', 'val-label val-label-first')
+            .attr('x', xScale(knownData[0].label))
+            .attr('y', yScale(knownData[0].value) + labelOffset)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '11px')
+            .style('fill', '#2b6cb0')
+            .text(formatValue(knownData[0].value))
+
+        // Last known value (only if different from first)
+        if (knownData.length > 1) {
+            const lastKnown = knownData[knownData.length - 1]
+            g.append('text')
+                .attr('class', 'val-label val-label-last-known')
+                .attr('x', xScale(lastKnown.label))
+                .attr('y', yScale(lastKnown.value) + labelOffset)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '11px')
+                .style('fill', '#2b6cb0')
+                .text(formatValue(lastKnown.value))
+        }
+    }
+
+    // User drawn line (empty — label added dynamically by setupDrag)
     g.append('path')
         .attr('class', 'user-line')
         .attr('fill', 'none')
@@ -153,17 +200,47 @@ export function createChart(svgEl, data, options) {
     return { xScale, yScale, innerWidth, innerHeight, clipId }
 }
 
+function formatValue(v) {
+    if (v == null) return ''
+    if (Math.abs(v) >= 1000) return d3.format(',.0f')(v)
+    if (Number.isInteger(v)) return String(v)
+    return d3.format('.2~f')(v)
+}
+
+/**
+ * Compute Euclidean distance and Pearson correlation between two value arrays.
+ * Both arrays must be the same length with no nulls.
+ */
+function computeMetrics(trueVals, userVals) {
+    const n = trueVals.length
+    if (n === 0) return null
+
+    // Euclidean distance
+    const euclidean = Math.sqrt(
+        trueVals.reduce((sum, t, i) => sum + (t - userVals[i]) ** 2, 0)
+    )
+
+    // Pearson correlation
+    const meanT = trueVals.reduce((s, v) => s + v, 0) / n
+    const meanU = userVals.reduce((s, v) => s + v, 0) / n
+    const num = trueVals.reduce((s, t, i) => s + (t - meanT) * (userVals[i] - meanU), 0)
+    const denT = Math.sqrt(trueVals.reduce((s, t) => s + (t - meanT) ** 2, 0))
+    const denU = Math.sqrt(userVals.reduce((s, u) => s + (u - meanU) ** 2, 0))
+    const pearson = (denT === 0 || denU === 0) ? null : num / (denT * denU)
+
+    return { euclidean, pearson }
+}
+
 /**
  * Set up mouse/touch drag to let the user draw hidden periods.
  *
- * @param {Element} gEl         The chart-g DOM element
- * @param {{ xScale, yScale }}  scales
+ * @param {Element} gEl
+ * @param {{ xScale, yScale }} scales
  * @param {{ labels, values, drawStart }} data
  * @param {number} innerWidth
  * @param {number} innerHeight
- * @param {Function} onUpdate   Called with updated userPoints on each move
- * @param {Function} onComplete Called when all hidden periods are filled
- * @returns {Array} userPoints
+ * @param {Function} onUpdate
+ * @param {Function} onComplete  Called with (userPoints, metrics)
  */
 export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, onComplete) {
     const { xScale, yScale } = scales
@@ -175,7 +252,7 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
         x: xScale(label),
     }))
 
-    // Anchor point: last known value, used to make the drawn line continuous
+    // Anchor point: last known value — makes the drawn line continuous
     const anchorPoint = drawStart > 0 && values[drawStart - 1] != null
         ? { label: labels[drawStart - 1], value: values[drawStart - 1], x: xScale(labels[drawStart - 1]) }
         : null
@@ -188,12 +265,28 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
         .y(d => yScale(d.value))
         .curve(d3.curveMonotoneX)
 
+    const gSel = d3.select(gEl)
+
     function renderUserLine() {
         const filledPoints = userPoints.filter(p => p.value != null)
         const pointsToRender = anchorPoint ? [anchorPoint, ...filledPoints] : filledPoints
-        d3.select(gEl).select('.user-line')
+        gSel.select('.user-line')
             .datum(pointsToRender)
             .attr('d', pointsToRender.length > 0 ? lineGen : null)
+
+        // Update last-user-value label
+        gSel.select('.val-label-last-user').remove()
+        if (filledPoints.length > 0) {
+            const last = filledPoints[filledPoints.length - 1]
+            gSel.append('text')
+                .attr('class', 'val-label val-label-last-user')
+                .attr('x', last.x)
+                .attr('y', yScale(last.value) - 8)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '11px')
+                .style('fill', '#c05621')
+                .text(formatValue(last.value))
+        }
     }
 
     function processPointer(event, containerEl) {
@@ -214,16 +307,18 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
         drawn.add(closest.label)
 
         renderUserLine()
-
         onUpdate([...userPoints])
 
         if (drawn.size === userPoints.length) {
-            onComplete([...userPoints])
+            // All hidden periods drawn — compute metrics
+            const trueVals = labels.slice(drawStart).map((_, i) => values[drawStart + i])
+            const userVals = userPoints.map(p => p.value)
+            const metrics = computeMetrics(trueVals, userVals)
+            onComplete([...userPoints], metrics)
         }
     }
 
-    d3.select(gEl)
-        .append('rect')
+    gSel.append('rect')
         .attr('class', 'drag-overlay')
         .attr('x', 0).attr('y', 0)
         .attr('width', innerWidth).attr('height', innerHeight)
@@ -249,10 +344,6 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
 
 /**
  * Animate the clip path to reveal the true line left-to-right.
- *
- * @param {Element} gEl     The chart-g DOM element (clip path lives here)
- * @param {string}  clipId  ID of the clip path
- * @param {number}  fullWidth  Width to expand to (innerWidth + some buffer)
  */
 export function revealTrueLine(gEl, clipId, fullWidth) {
     d3.select(gEl)
@@ -264,10 +355,11 @@ export function revealTrueLine(gEl, clipId, fullWidth) {
 }
 
 /**
- * Remove the drag overlay so drawing can be re-initialized.
- * @param {Element} gEl
+ * Remove the drag overlay and user line so drawing can be re-initialized.
  */
 export function resetDrawing(gEl) {
-    d3.select(gEl).select('.user-line').attr('d', null)
-    d3.select(gEl).select('.drag-overlay').remove()
+    const gSel = d3.select(gEl)
+    gSel.select('.user-line').attr('d', null)
+    gSel.select('.val-label-last-user').remove()
+    gSel.select('.drag-overlay').remove()
 }

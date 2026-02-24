@@ -1,3 +1,25 @@
+# DHIS2 Trend Sketch
+
+A dashboard plugin for the DHIS2 platform that tests users' intuitions about health data trends.
+
+## What it does
+
+Trend Sketch presents a line chart from any existing DHIS2 visualization, but hides the most recent periods. The user draws their expected values freehand by clicking and dragging across the hidden portion of the chart. Once the drawing is complete, the true values are revealed with a left-to-right animation, and two accuracy metrics are displayed: Euclidean distance (how far off the drawn line was in absolute terms) and Pearson correlation (how well the drawn shape matched the true trend).
+
+## Use cases
+
+- **Training and awareness**: Help health programme staff develop an intuitive sense of how their indicators are moving over time, before seeing the actual data.
+- **Forecasting calibration**: Allow analysts or managers to record their prior expectations, then compare against actuals to identify systematic biases.
+- **Data review meetings**: Use as an interactive opener to engage teams with their own data and prompt discussion about what drove unexpected results.
+
+## How to use
+
+In **edit mode**, select any line visualization from the dropdown. The visualization must have 3–12 periods on the x-axis, a single data dimension, and a single organisation unit. Use the hidden periods slider to control how many recent periods the user will draw.
+
+In **view mode**, the configuration controls are hidden and the user sees only the visible portion of the chart. They draw the remaining values freehand, then the true line is revealed along with their accuracy scores.
+
+---
+
 This project was bootstrapped with [DHIS2 Application Platform](https://github.com/dhis2/app-platform).
 
 ## Available Scripts
