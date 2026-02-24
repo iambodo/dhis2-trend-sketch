@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { EditPanel } from './components/EditPanel'
 import { TrendSketchChart } from './components/TrendSketchChart'
+import { useDatastoreNamespace } from './hooks/useDatastoreNamespace'
 import classes from './Plugin.module.css'
 import './locales'
 
@@ -45,9 +46,12 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
     const editMode = dashboardMode === 'edit'
     const [selectedVizId, setSelectedVizId] = useState(noContext ? DEFAULT_VIZ_ID : null)
     const [hiddenPeriods, setHiddenPeriods] = useState(noContext ? DEFAULT_HIDDEN_PERIODS : 3)
+    const [saveEstimates, setSaveEstimates] = useState(false)
     const [totalPeriods, setTotalPeriods] = useState(0)
     // Stable per-instance ID for isolated localStorage in dev (one per page load)
     const instanceId = useState(() => getInstanceId())[0]
+
+    const { exists: datastoreExists } = useDatastoreNamespace('trend-sketch')
 
     // Restore cached config on mount (only when dashboard context exists)
     useEffect(() => {
@@ -61,24 +65,33 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
                 if (cachedData?.hiddenPeriods != null) {
                     setHiddenPeriods(cachedData.hiddenPeriods)
                 }
+                if (cachedData?.saveEstimates != null) {
+                    setSaveEstimates(cachedData.saveEstimates)
+                }
             })
         } else {
             // Dev fallback: restore from instance-scoped localStorage
             const cached = readLocalCache(instanceId)
             if (cached?.selectedVizId) setSelectedVizId(cached.selectedVizId)
             if (cached?.hiddenPeriods != null) setHiddenPeriods(cached.hiddenPeriods)
+            if (cached?.saveEstimates != null) setSaveEstimates(cached.saveEstimates)
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     function handleVizChange(vizId) {
         setSelectedVizId(vizId)
         setHiddenPeriods(3)
-        persistCache({ selectedVizId: vizId, hiddenPeriods: 3 })
+        persistCache({ selectedVizId: vizId, hiddenPeriods: 3, saveEstimates })
     }
 
     function handleHiddenPeriodsChange(value) {
         setHiddenPeriods(value)
-        persistCache({ selectedVizId, hiddenPeriods: value })
+        persistCache({ selectedVizId, hiddenPeriods: value, saveEstimates })
+    }
+
+    function handleSaveEstimatesChange(value) {
+        setSaveEstimates(value)
+        persistCache({ selectedVizId, hiddenPeriods, saveEstimates: value })
     }
 
     function persistCache(data) {
@@ -97,14 +110,18 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
                     selectedVizId={selectedVizId}
                     hiddenPeriods={hiddenPeriods}
                     totalPeriods={totalPeriods}
+                    datastoreExists={datastoreExists}
+                    saveEstimates={saveEstimates}
                     onVizChange={handleVizChange}
                     onHiddenPeriodsChange={handleHiddenPeriodsChange}
+                    onSaveEstimatesChange={handleSaveEstimatesChange}
                 />
             )}
             <TrendSketchChart
                 vizId={selectedVizId}
                 hiddenPeriods={hiddenPeriods}
                 editMode={editMode}
+                saveEstimates={saveEstimates}
                 onPeriodsLoaded={setTotalPeriods}
             />
         </div>

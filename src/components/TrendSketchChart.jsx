@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import PropTypes from 'prop-types'
 import { Button, CircularLoader, NoticeBox } from '@dhis2/ui'
 import { useAnalyticsData } from '../hooks/useAnalyticsData'
+import { useSaveEstimate } from '../hooks/useSaveEstimate'
 import { createChart, setupDrag, revealTrueLine, resetDrawing } from '../utils/drawUtils'
 import classes from './TrendSketchChart.module.css'
 
@@ -31,7 +32,7 @@ function describeMetrics({ pearson, inverseEuclidean }) {
     return `Your estimate was ${shapeDesc} to the real data, ${connector} it was ${levelDesc}.`
 }
 
-export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoaded }) {
+export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates, onPeriodsLoaded }) {
     const svgRef = useRef(null)
     const gRef = useRef(null)
     const containerRef = useRef(null)
@@ -39,12 +40,16 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
     const [isComplete, setIsComplete] = useState(false)
     const [showTrue, setShowTrue] = useState(false)
     const [metrics, setMetrics] = useState(null)
+    // Store user points for submission
+    const userPointsRef = useRef([])
     const scalesRef = useRef(null)
     const innerWidthRef = useRef(0)
     const clipIdRef = useRef(null)
 
-    const { periods, values, dataLabel, title, subtitle, yAxisRange, loading, error } =
+    const { periods, values, ouId, dataLabel, title, subtitle, yAxisRange, loading, error } =
         useAnalyticsData(vizId)
+
+    const { saveEstimate, saving, saveError } = useSaveEstimate()
 
     // Notify parent of total period count
     useEffect(() => {
@@ -67,6 +72,15 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
     const drawStart = Math.max(0, periods.length - hiddenPeriods)
 
+    // Build context window key: {vizId}_{ouId}_{firstPeriodId}_{lastPeriodId}
+    function buildContextKey() {
+        if (!vizId || !ouId || !periods.length) return null
+        const firstHidden = periods[drawStart]?.id
+        const lastHidden = periods[periods.length - 1]?.id
+        if (!firstHidden || !lastHidden) return null
+        return `${vizId}_${ouId}_${firstHidden}_${lastHidden}`
+    }
+
     const buildChart = useCallback(() => {
         if (!svgRef.current || !periods.length || !values.length) return
 
@@ -75,6 +89,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
         setIsComplete(false)
         setShowTrue(false)
         setMetrics(null)
+        userPointsRef.current = []
 
         const { xScale, yScale, innerWidth, innerHeight, clipId } = createChart(
             svgRef.current,
@@ -94,14 +109,18 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             innerWidth,
             innerHeight,
             () => {},
-            (_userPoints, m) => {
+            (drawnPoints, m) => {
+                userPointsRef.current = drawnPoints
                 setIsComplete(true)
-                setShowTrue(true)
                 setMetrics(m)
-                revealTrueLine(gRef.current, clipId, innerWidth)
+                // Only auto-reveal if saveEstimates is not active
+                if (!saveEstimates) {
+                    setShowTrue(true)
+                    revealTrueLine(gRef.current, clipId, innerWidth)
+                }
             }
         )
-    }, [periods, values, drawStart, containerWidth, yAxisRange])
+    }, [periods, values, drawStart, containerWidth, yAxisRange, saveEstimates])
 
     useEffect(() => {
         buildChart()
@@ -120,6 +139,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
         setIsComplete(false)
         setShowTrue(false)
         setMetrics(null)
+        userPointsRef.current = []
 
         const labels = periods.map(p => p.label)
         const { xScale, yScale } = scalesRef.current
@@ -134,14 +154,44 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             innerWidth,
             innerHeight,
             () => {},
-            (_userPoints, m) => {
+            (drawnPoints, m) => {
+                userPointsRef.current = drawnPoints
                 setIsComplete(true)
-                setShowTrue(true)
                 setMetrics(m)
-                revealTrueLine(gRef.current, clipId, innerWidth)
+                if (!saveEstimates) {
+                    setShowTrue(true)
+                    revealTrueLine(gRef.current, clipId, innerWidth)
+                }
             }
         )
-    }, [periods, values, drawStart])
+    }, [periods, values, drawStart, saveEstimates])
+
+    const handleSubmit = useCallback(async () => {
+        const contextKey = buildContextKey()
+        if (!contextKey) return
+
+        const periodsSlice = periods.slice(drawStart)
+        const pts = userPointsRef.current
+
+        // Guard: ensure all periods are filled
+        if (!pts || pts.length < periodsSlice.length) {
+            return
+        }
+
+        // Extract numeric values from the point objects { label, value, x }
+        const yValues = pts.map(p => (typeof p === 'object' ? p.value : p) ?? 0)
+
+        try {
+            await saveEstimate(contextKey, periodsSlice, yValues)
+            // On success: reveal the true line
+            setShowTrue(true)
+            if (gRef.current && clipIdRef.current && innerWidthRef.current) {
+                revealTrueLine(gRef.current, clipIdRef.current, innerWidthRef.current)
+            }
+        } catch {
+            // saveError state is set inside useSaveEstimate
+        }
+    }, [periods, drawStart, ouId, vizId, saveEstimate]) // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!vizId || editMode) {
         return (
@@ -174,6 +224,9 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             </div>
         )
     }
+
+    // Whether to show the submit button instead of auto-reveal
+    const requiresSubmit = saveEstimates && !showTrue
 
     return (
         <div className={classes.chartWrapper}>
@@ -209,6 +262,17 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                         </div>
                     )}
                     <div className={classes.controlsRow}>
+                        {requiresSubmit && (
+                            <Button
+                                onClick={handleSubmit}
+                                primary
+                                small
+                                loading={saving}
+                                disabled={saving}
+                            >
+                                Submit estimate
+                            </Button>
+                        )}
                         <Button onClick={handleReset} secondary small>
                             Reset drawing
                         </Button>
@@ -218,6 +282,11 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                             </span>
                         )}
                     </div>
+                    {saveError && (
+                        <p className={classes.saveError}>
+                            Failed to save estimate: {saveError.message}
+                        </p>
+                    )}
                 </div>
             )}
         </div>
@@ -228,9 +297,11 @@ TrendSketchChart.propTypes = {
     vizId: PropTypes.string,
     hiddenPeriods: PropTypes.number.isRequired,
     editMode: PropTypes.bool,
+    saveEstimates: PropTypes.bool,
     onPeriodsLoaded: PropTypes.func,
 }
 
 TrendSketchChart.defaultProps = {
     editMode: false,
+    saveEstimates: false,
 }

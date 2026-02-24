@@ -88,6 +88,13 @@
     color: #276749;
 }
 
+.saveError {
+    margin: 0;
+    font-size: 12px;
+    color: #c0392b;
+    padding: 4px 0;
+}
+
 .editPlaceholder {
     display: flex;
     align-items: center;

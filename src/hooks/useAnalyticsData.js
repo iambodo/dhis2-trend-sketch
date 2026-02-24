@@ -41,7 +41,7 @@ function extractDimensions(visualization) {
     }
 }
 
-const EMPTY = { periods: [], values: [], dataLabel: '', title: '', subtitle: '', yAxisRange: null, loading: false, error: null }
+const EMPTY = { periods: [], values: [], dataLabel: '', title: '', subtitle: '', ouId: null, yAxisRange: null, loading: false, error: null }
 
 /**
  * Fetch analytics data for the selected visualization.
@@ -126,6 +126,7 @@ export function useAnalyticsData(vizId) {
                     dataLabel: dims.dxName,
                     title: dims.vizName,
                     subtitle: ouMeta?.name || '',
+                    ouId: dims.ouId,
                     yAxisRange,
                     loading: false,
                     error: null,
