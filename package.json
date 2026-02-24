@@ -1,0 +1,25 @@
+{
+  "name": "dhis2-trend-sketch",
+  "version": "1.0.0",
+  "description": "DHIS2 dashboard plugin for interactive trend forecasting",
+  "license": "BSD-3-Clause",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "build": "d2-app-scripts build",
+    "start": "d2-app-scripts start",
+    "test": "d2-app-scripts test",
+    "deploy": "d2-app-scripts deploy"
+  },
+  "dependencies": {
+    "@dhis2/app-runtime": "^3.16.0",
+    "@dhis2/ui": "^10.12.10",
+    "d3": "^7.9.0",
+    "prop-types": "^15.8.1",
+    "react": "18",
+    "react-dom": "18"
+  },
+  "devDependencies": {
+    "@dhis2/cli-app-scripts": "^12.11.0-alpha.1"
+  }
+}

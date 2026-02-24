@@ -1,0 +1,80 @@
+.chartWrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 8px 0;
+}
+
+.chartMeta {
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 4px;
+    gap: 4px;
+}
+
+.title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #212529;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: #868e96;
+}
+
+.dataLabel {
+    font-size: 12px;
+    color: #495057;
+    font-style: italic;
+}
+
+.instruction {
+    padding: 6px 16px;
+    font-size: 13px;
+    color: #495057;
+    background: #fff3cd;
+    border-left: 3px solid #ffc107;
+    margin: 4px 16px;
+    border-radius: 2px;
+}
+
+.svgContainer {
+    width: 100%;
+}
+
+.svg {
+    display: block;
+    width: 100%;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+}
+
+.revealNote {
+    font-size: 13px;
+    color: #276749;
+}
+
+.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: #868e96;
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
