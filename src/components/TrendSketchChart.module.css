@@ -47,6 +47,7 @@
 .svg {
     display: block;
     width: 100%;
+    overflow: visible;
 }
 
 .controls {
@@ -58,9 +59,22 @@
 
 .metrics {
     display: flex;
-    gap: 20px;
+    flex-direction: column;
+    gap: 4px;
     font-size: 13px;
     color: #495057;
+}
+
+.metricsText {
+    margin: 0;
+    font-size: 13px;
+    color: #212529;
+}
+
+.metricsNumbers {
+    margin: 0;
+    font-size: 12px;
+    color: #868e96;
 }
 
 .controlsRow {
@@ -72,6 +86,20 @@
 .revealNote {
     font-size: 13px;
     color: #276749;
+}
+
+.editPlaceholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    background: #f5f5f5;
+    color: #868e96;
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+    border-radius: 4px;
+    margin: 8px 16px;
 }
 
 .placeholder {

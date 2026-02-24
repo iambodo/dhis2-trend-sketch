@@ -5,20 +5,32 @@ import { TrendSketchChart } from './components/TrendSketchChart'
 import classes from './Plugin.module.css'
 import './locales'
 
-const LOCAL_STORAGE_KEY = 'dhis2-trend-sketch-config'
+const STORAGE_KEY_PREFIX = 'dhis2-trend-sketch-'
 
-function readLocalCache() {
+// Generate a stable per-instance ID stored in sessionStorage so each plugin
+// instance on a dashboard gets its own isolated localStorage slot in dev mode.
+function getInstanceId() {
+    const key = 'dhis2-trend-sketch-instance-id'
+    let id = sessionStorage.getItem(key)
+    if (!id) {
+        id = Math.random().toString(36).slice(2, 10)
+        sessionStorage.setItem(key, id)
+    }
+    return id
+}
+
+function readLocalCache(instanceId) {
     try {
-        const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
+        const raw = localStorage.getItem(STORAGE_KEY_PREFIX + instanceId)
         return raw ? JSON.parse(raw) : null
     } catch {
         return null
     }
 }
 
-function writeLocalCache(data) {
+function writeLocalCache(instanceId, data) {
     try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data))
+        localStorage.setItem(STORAGE_KEY_PREFIX + instanceId, JSON.stringify(data))
     } catch {
         // ignore
     }
@@ -34,11 +46,14 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
     const [selectedVizId, setSelectedVizId] = useState(noContext ? DEFAULT_VIZ_ID : null)
     const [hiddenPeriods, setHiddenPeriods] = useState(noContext ? DEFAULT_HIDDEN_PERIODS : 3)
     const [totalPeriods, setTotalPeriods] = useState(0)
+    // Stable per-instance ID for isolated localStorage in dev (one per page load)
+    const instanceId = useState(() => getInstanceId())[0]
 
     // Restore cached config on mount (only when dashboard context exists)
     useEffect(() => {
         if (noContext) return
         if (onCacheableDataLoad) {
+            // Real dashboard: each plugin instance has its own cacheable store
             onCacheableDataLoad(cachedData => {
                 if (cachedData?.selectedVizId) {
                     setSelectedVizId(cachedData.selectedVizId)
@@ -48,8 +63,8 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
                 }
             })
         } else {
-            // Dev fallback: restore from localStorage
-            const cached = readLocalCache()
+            // Dev fallback: restore from instance-scoped localStorage
+            const cached = readLocalCache(instanceId)
             if (cached?.selectedVizId) setSelectedVizId(cached.selectedVizId)
             if (cached?.hiddenPeriods != null) setHiddenPeriods(cached.hiddenPeriods)
         }
@@ -68,9 +83,10 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
 
     function persistCache(data) {
         if (setCacheableData) {
+            // Real dashboard: setCacheableData is already instance-scoped by the platform
             setCacheableData(data)
         } else {
-            writeLocalCache(data)
+            writeLocalCache(instanceId, data)
         }
     }
 

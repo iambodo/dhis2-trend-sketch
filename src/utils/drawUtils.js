@@ -208,17 +208,18 @@ function formatValue(v) {
 }
 
 /**
- * Compute Euclidean distance and Pearson correlation between two value arrays.
- * Both arrays must be the same length with no nulls.
+ * Compute inverse Euclidean distance and Pearson correlation between two value arrays.
+ * Inverse Euclidean = 1 / (1 + euclidean), so 1.0 = perfect match, approaching 0 = very far off.
  */
 function computeMetrics(trueVals, userVals) {
     const n = trueVals.length
     if (n === 0) return null
 
-    // Euclidean distance
+    // Euclidean distance → invert so higher = better
     const euclidean = Math.sqrt(
         trueVals.reduce((sum, t, i) => sum + (t - userVals[i]) ** 2, 0)
     )
+    const inverseEuclidean = 1 / (1 + euclidean)
 
     // Pearson correlation
     const meanT = trueVals.reduce((s, v) => s + v, 0) / n
@@ -228,7 +229,7 @@ function computeMetrics(trueVals, userVals) {
     const denU = Math.sqrt(userVals.reduce((s, u) => s + (u - meanU) ** 2, 0))
     const pearson = (denT === 0 || denU === 0) ? null : num / (denT * denU)
 
-    return { euclidean, pearson }
+    return { inverseEuclidean, pearson }
 }
 
 /**
@@ -245,6 +246,7 @@ function computeMetrics(trueVals, userVals) {
 export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, onComplete) {
     const { xScale, yScale } = scales
     const { labels, values, drawStart } = data
+    const svgEl = gEl.closest('svg')
 
     const userPoints = labels.slice(drawStart).map(label => ({
         label,
@@ -274,15 +276,20 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
             .datum(pointsToRender)
             .attr('d', pointsToRender.length > 0 ? lineGen : null)
 
-        // Update last-user-value label
-        gSel.select('.val-label-last-user').remove()
+        // Update last-user-value label — fixed at right axis edge, Y tracks latest drawn value.
+        // Rendered on the SVG root so it appears outside the clipped <g>.
+        const svgSel = d3.select(svgEl)
+        svgSel.select('.val-label-last-user').remove()
         if (filledPoints.length > 0) {
             const last = filledPoints[filledPoints.length - 1]
-            gSel.append('text')
-                .attr('class', 'val-label val-label-last-user')
-                .attr('x', last.x)
-                .attr('y', yScale(last.value) - 8)
-                .attr('text-anchor', 'middle')
+            // X is always just beyond the right axis; Y follows the latest drawn value
+            const svgX = MARGIN.left + innerWidth + 6
+            const svgY = MARGIN.top + yScale(last.value) + 4
+            svgSel.append('text')
+                .attr('class', 'val-label-last-user')
+                .attr('x', svgX)
+                .attr('y', svgY)
+                .attr('text-anchor', 'start')
                 .style('font-size', '11px')
                 .style('fill', '#c05621')
                 .text(formatValue(last.value))
@@ -360,6 +367,8 @@ export function revealTrueLine(gEl, clipId, fullWidth) {
 export function resetDrawing(gEl) {
     const gSel = d3.select(gEl)
     gSel.select('.user-line').attr('d', null)
-    gSel.select('.val-label-last-user').remove()
     gSel.select('.drag-overlay').remove()
+    // Label lives on the SVG root, not inside <g>
+    const svgEl = gEl.closest('svg')
+    if (svgEl) d3.select(svgEl).select('.val-label-last-user').remove()
 }

@@ -9,6 +9,28 @@ const CHART_HEIGHT = 320
 const MARGIN_TOP = 20
 const MARGIN_BOTTOM = 50
 
+function describeMetrics({ pearson, inverseEuclidean }) {
+    const shapeDesc =
+        pearson == null ? null :
+        pearson >= 0.9 ? 'very similar in shape' :
+        pearson >= 0.7 ? 'somewhat similar in shape' :
+        pearson >= 0.4 ? 'loosely similar in shape' :
+        'quite different in shape'
+
+    const levelDesc =
+        inverseEuclidean >= 0.8 ? 'very close to the target' :
+        inverseEuclidean >= 0.5 ? 'reasonably close to the target' :
+        inverseEuclidean >= 0.2 ? 'somewhat off target' :
+        'significantly off target'
+
+    if (shapeDesc == null) {
+        return `Your estimate was ${levelDesc}.`
+    }
+
+    const connector = pearson >= 0.7 && inverseEuclidean >= 0.5 ? 'and' : 'but'
+    return `Your estimate was ${shapeDesc} to the real data, ${connector} it was ${levelDesc}.`
+}
+
 export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoaded }) {
     const svgRef = useRef(null)
     const gRef = useRef(null)
@@ -121,12 +143,10 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
         )
     }, [periods, values, drawStart])
 
-    if (!vizId) {
+    if (!vizId || editMode) {
         return (
-            <div className={classes.placeholder}>
-                {editMode
-                    ? 'Select a visualization to get started.'
-                    : 'No visualization configured. Switch to edit mode to set one up.'}
+            <div className={classes.editPlaceholder}>
+                Edit dashboard to select a single series line graph for trend sketching.
             </div>
         )
     }
@@ -178,10 +198,14 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                 <div className={classes.controls}>
                     {metrics && (
                         <div className={classes.metrics}>
-                            <span>Euclidean distance: <strong>{metrics.euclidean.toPrecision(2)}</strong></span>
-                            {metrics.pearson != null && (
-                                <span>Pearson correlation: <strong>{metrics.pearson.toPrecision(2)}</strong></span>
-                            )}
+                            <p className={classes.metricsText}>
+                                {describeMetrics(metrics)}
+                            </p>
+                            <p className={classes.metricsNumbers}>
+                                Pearson correlation: <strong>{metrics.pearson != null ? metrics.pearson.toPrecision(2) : 'n/a'}</strong>
+                                {' · '}
+                                Inverse Euclidean distance: <strong>{metrics.inverseEuclidean.toPrecision(2)}</strong>
+                            </p>
                         </div>
                     )}
                     <div className={classes.controlsRow}>
