@@ -11,15 +11,18 @@ function todayString() {
  * Hook for saving user estimates to the DHIS2 datastore.
  *
  * saveEstimate(contextKey, periodsSlice, userPoints) — reads existing data,
- * appends the current user's entry, then writes back via POST (new) or PUT (existing).
+ * snapshots prior entries, appends the current user's entry, then writes back.
  *
  * periodsSlice: array of period objects { id, label } for the hidden periods
  * userPoints:   array of y-values (numbers) matching periodsSlice order
+ *
+ * Returns priorEstimates: the entries that existed *before* this submission.
  */
 export function useSaveEstimate() {
     const engine = useDataEngine()
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState(null)
+    const [priorEstimates, setPriorEstimates] = useState([])
 
     const saveEstimate = useCallback(async (contextKey, periodsSlice, userPoints) => {
         setSaving(true)
@@ -28,9 +31,10 @@ export function useSaveEstimate() {
         try {
             // 1. Get current user
             const { me } = await engine.query({
-                me: { resource: 'me', params: { fields: 'username' } },
+                me: { resource: 'me', params: { fields: 'id,username' } },
             })
             const username = me.username
+            const userId = me.id
 
             // 2. Try to read existing key
             let existing = null
@@ -51,6 +55,9 @@ export function useSaveEstimate() {
                 }
             }
 
+            // Snapshot entries that existed before this submission
+            const priorEntries = existing.users || []
+
             // 3. Build new entry
             const data = periodsSlice.map((p, i) => ({
                 period: p.id,
@@ -58,12 +65,13 @@ export function useSaveEstimate() {
             }))
             const newEntry = {
                 user: username,
+                userid: userId,
                 date: todayString(),
                 data,
             }
 
             const updated = {
-                users: [...(existing.users || []), newEntry],
+                users: [...priorEntries, newEntry],
             }
 
             // 4. POST (new key) or PUT (existing key)
@@ -80,6 +88,9 @@ export function useSaveEstimate() {
                 }
 
             await engine.mutate(mutation)
+
+            // Expose prior entries for comparison
+            setPriorEstimates(priorEntries)
         } catch (err) {
             console.error('[useSaveEstimate] error:', err)
             setSaveError(err)
@@ -89,5 +100,5 @@ export function useSaveEstimate() {
         }
     }, [engine]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    return { saveEstimate, saving, saveError }
+    return { saveEstimate, saving, saveError, priorEstimates }
 }

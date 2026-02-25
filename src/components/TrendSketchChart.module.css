@@ -95,6 +95,12 @@
     padding: 4px 0;
 }
 
+.compareRow {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+}
+
 .editPlaceholder {
     display: flex;
     align-items: center;

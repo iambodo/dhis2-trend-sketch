@@ -46,7 +46,7 @@ function Plugin({ dashboardMode, onCacheableDataLoad, setCacheableData }) {
     const editMode = dashboardMode === 'edit'
     const [selectedVizId, setSelectedVizId] = useState(noContext ? DEFAULT_VIZ_ID : null)
     const [hiddenPeriods, setHiddenPeriods] = useState(noContext ? DEFAULT_HIDDEN_PERIODS : 3)
-    const [saveEstimates, setSaveEstimates] = useState(false)
+    const [saveEstimates, setSaveEstimates] = useState(true)
     const [totalPeriods, setTotalPeriods] = useState(0)
     // Stable per-instance ID for isolated localStorage in dev (one per page load)
     const instanceId = useState(() => getInstanceId())[0]

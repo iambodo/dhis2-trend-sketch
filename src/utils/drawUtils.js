@@ -372,3 +372,116 @@ export function resetDrawing(gEl) {
     const svgEl = gEl.closest('svg')
     if (svgEl) d3.select(svgEl).select('.val-label-last-user').remove()
 }
+
+/**
+ * Plot prior estimate lines, a mean line, and ±1 SD band over the drawing area.
+ * Lines start from the anchor point (last known value) so they bridge the connector gap.
+ *
+ * @param {Element} gEl           — the .chart-g element
+ * @param {Array}   priorEntries  — array of { data: [{period, value}] }
+ * @param {Array}   periodsSlice  — array of { id, label } for the hidden periods
+ * @param {{ xScale, yScale }} scales
+ * @param {{ label: string, value: number }|null} anchorPoint — last known data point
+ */
+export function plotPriorEstimates(gEl, priorEntries, periodsSlice, scales, anchorPoint) {
+    const { xScale, yScale } = scales
+
+    // Remove any existing overlay first
+    const gSel = d3.select(gEl)
+    gSel.select('.prior-overlay').remove()
+
+    if (!priorEntries.length || !periodsSlice.length) return
+
+    const overlay = gSel.append('g').attr('class', 'prior-overlay')
+
+    // Build a value matrix: allSeries[i] = array of values (one per period), null if missing
+    const allSeries = priorEntries.map(entry => {
+        const byPeriod = {}
+        ;(entry.data || []).forEach(d => { byPeriod[d.period] = d.value })
+        return periodsSlice.map(p => byPeriod[p.id] != null ? byPeriod[p.id] : null)
+    })
+
+    // Line generator (includes anchor point for continuity across connector gap)
+    const lineGen = d3.line()
+        .defined(d => d.value != null)
+        .x(d => xScale(d.label))
+        .y(d => yScale(d.value))
+        .curve(d3.curveMonotoneX)
+
+    // Per-period mean and SD across ALL entries (including those beyond cap)
+    const meanSD = periodsSlice.map((_, pi) => {
+        const vals = allSeries.map(s => s[pi]).filter(v => v != null)
+        if (vals.length === 0) return { mean: null, sd: 0 }
+        const mean = vals.reduce((s, v) => s + v, 0) / vals.length
+        const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
+        return { mean, sd: Math.sqrt(variance) }
+    })
+
+    // ±1 SD band — light yellow, layered behind all lines
+    const bandData = periodsSlice
+        .map((p, i) => ({ label: p.label, ...meanSD[i] }))
+        .filter(d => d.mean != null)
+
+    if (bandData.length > 1) {
+        const bandWithAnchor = anchorPoint
+            ? [{ label: anchorPoint.label, mean: anchorPoint.value, sd: 0 }, ...bandData]
+            : bandData
+
+        const areaGen = d3.area()
+            .defined(d => d.mean != null)
+            .x(d => xScale(d.label))
+            .y0(d => yScale(Math.max(yScale.domain()[0], d.mean - d.sd)))
+            .y1(d => yScale(Math.min(yScale.domain()[1], d.mean + d.sd)))
+            .curve(d3.curveMonotoneX)
+
+        overlay.append('path')
+            .datum(bandWithAnchor)
+            .attr('class', 'prior-band')
+            .attr('fill', '#fef9c3')
+            .attr('opacity', 0.6)
+            .attr('d', areaGen)
+    }
+
+    // Individual lines — cap at 10 most recent, bridge from anchor point
+    const toPlot = allSeries.length > 10 ? allSeries.slice(-10) : allSeries
+    toPlot.forEach(series => {
+        const hiddenPoints = periodsSlice.map((p, i) => ({ label: p.label, value: series[i] }))
+        const points = anchorPoint ? [anchorPoint, ...hiddenPoints] : hiddenPoints
+        overlay.append('path')
+            .datum(points)
+            .attr('class', 'prior-line')
+            .attr('fill', 'none')
+            .attr('stroke', '#d8b4fe')
+            .attr('stroke-width', 1)
+            .attr('opacity', 0.5)
+            .attr('d', lineGen)
+    })
+
+    // Mean line (drawn on top), bridge from anchor point
+    if (bandData.length > 1) {
+        const meanLineGen = d3.line()
+            .defined(d => d.mean != null)
+            .x(d => xScale(d.label))
+            .y(d => yScale(d.mean))
+            .curve(d3.curveMonotoneX)
+
+        const meanWithAnchor = anchorPoint
+            ? [{ label: anchorPoint.label, mean: anchorPoint.value }, ...bandData]
+            : bandData
+
+        overlay.append('path')
+            .datum(meanWithAnchor)
+            .attr('class', 'prior-mean')
+            .attr('fill', 'none')
+            .attr('stroke', '#7c3aed')
+            .attr('stroke-width', 2.5)
+            .attr('d', meanLineGen)
+    }
+}
+
+/**
+ * Remove the prior estimates overlay.
+ */
+export function clearPriorEstimates(gEl) {
+    d3.select(gEl).select('.prior-overlay').remove()
+}

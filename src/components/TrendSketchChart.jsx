@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import PropTypes from 'prop-types'
-import { Button, CircularLoader, NoticeBox } from '@dhis2/ui'
+import { Button, CircularLoader, NoticeBox, Switch } from '@dhis2/ui'
 import { useAnalyticsData } from '../hooks/useAnalyticsData'
 import { useSaveEstimate } from '../hooks/useSaveEstimate'
-import { createChart, setupDrag, revealTrueLine, resetDrawing } from '../utils/drawUtils'
+import { createChart, setupDrag, revealTrueLine, resetDrawing, plotPriorEstimates, clearPriorEstimates } from '../utils/drawUtils'
 import classes from './TrendSketchChart.module.css'
 
 const CHART_HEIGHT = 320
@@ -40,6 +40,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
     const [isComplete, setIsComplete] = useState(false)
     const [showTrue, setShowTrue] = useState(false)
     const [metrics, setMetrics] = useState(null)
+    const [showComparison, setShowComparison] = useState(false)
     // Store user points for submission
     const userPointsRef = useRef([])
     const scalesRef = useRef(null)
@@ -49,7 +50,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
     const { periods, values, ouId, dataLabel, title, subtitle, yAxisRange, loading, error } =
         useAnalyticsData(vizId)
 
-    const { saveEstimate, saving, saveError } = useSaveEstimate()
+    const { saveEstimate, saving, saveError, priorEstimates } = useSaveEstimate()
 
     // Notify parent of total period count
     useEffect(() => {
@@ -71,6 +72,20 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
     }, [])
 
     const drawStart = Math.max(0, periods.length - hiddenPeriods)
+
+    // Sync prior estimates overlay whenever comparison toggle or data changes
+    useEffect(() => {
+        if (!gRef.current || !scalesRef.current || !showTrue) return
+        const periodsSlice = periods.slice(drawStart)
+        const anchorPoint = drawStart > 0 && values[drawStart - 1] != null
+            ? { label: periods[drawStart - 1].label, value: values[drawStart - 1] }
+            : null
+        if (showComparison && priorEstimates.length > 0) {
+            plotPriorEstimates(gRef.current, priorEstimates, periodsSlice, scalesRef.current, anchorPoint)
+        } else {
+            clearPriorEstimates(gRef.current)
+        }
+    }, [showComparison, priorEstimates, showTrue]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Build context window key: {vizId}_{ouId}_{firstPeriodId}_{lastPeriodId}
     function buildContextKey() {
@@ -102,25 +117,27 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         scalesRef.current = { xScale, yScale }
         innerWidthRef.current = innerWidth
 
-        setupDrag(
-            gRef.current,
-            { xScale, yScale },
-            { labels, values, drawStart },
-            innerWidth,
-            innerHeight,
-            () => {},
-            (drawnPoints, m) => {
-                userPointsRef.current = drawnPoints
-                setIsComplete(true)
-                setMetrics(m)
-                // Only auto-reveal if saveEstimates is not active
-                if (!saveEstimates) {
-                    setShowTrue(true)
-                    revealTrueLine(gRef.current, clipId, innerWidth)
+        if (!editMode) {
+            setupDrag(
+                gRef.current,
+                { xScale, yScale },
+                { labels, values, drawStart },
+                innerWidth,
+                innerHeight,
+                () => {},
+                (drawnPoints, m) => {
+                    userPointsRef.current = drawnPoints
+                    setIsComplete(true)
+                    setMetrics(m)
+                    // Only auto-reveal if saveEstimates is not active
+                    if (!saveEstimates) {
+                        setShowTrue(true)
+                        revealTrueLine(gRef.current, clipId, innerWidth)
+                    }
                 }
-            }
-        )
-    }, [periods, values, drawStart, containerWidth, yAxisRange, saveEstimates])
+            )
+        }
+    }, [periods, values, drawStart, containerWidth, yAxisRange, saveEstimates, editMode])
 
     useEffect(() => {
         buildChart()
@@ -139,6 +156,8 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         setIsComplete(false)
         setShowTrue(false)
         setMetrics(null)
+        setShowComparison(false)
+        clearPriorEstimates(gRef.current)
         userPointsRef.current = []
 
         const labels = periods.map(p => p.label)
@@ -193,7 +212,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         }
     }, [periods, drawStart, ouId, vizId, saveEstimate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (!vizId || editMode) {
+    if (!vizId) {
         return (
             <div className={classes.editPlaceholder}>
                 Edit dashboard to select a single series line graph for trend sketching.
@@ -249,7 +268,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
 
             {isComplete && (
                 <div className={classes.controls}>
-                    {metrics && (
+                    {metrics && (!saveEstimates || showTrue) && (
                         <div className={classes.metrics}>
                             <p className={classes.metricsText}>
                                 {describeMetrics(metrics)}
@@ -272,6 +291,14 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
                             >
                                 Submit estimate
                             </Button>
+                        )}
+                        {showTrue && priorEstimates.length > 0 && (
+                            <Switch
+                                label="Compare to others"
+                                checked={showComparison}
+                                onChange={({ checked }) => setShowComparison(checked)}
+                                dense
+                            />
                         )}
                         <Button onClick={handleReset} secondary small>
                             Reset drawing
@@ -303,5 +330,5 @@ TrendSketchChart.propTypes = {
 
 TrendSketchChart.defaultProps = {
     editMode: false,
-    saveEstimates: false,
+    saveEstimates: true,
 }
