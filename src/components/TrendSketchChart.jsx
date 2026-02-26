@@ -41,8 +41,9 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
     const [showTrue, setShowTrue] = useState(false)
     const [metrics, setMetrics] = useState(null)
     const [showComparison, setShowComparison] = useState(false)
-    // Store user points for submission
+    // Store user points and metrics for submission (avoids stale closure in handleSubmit)
     const userPointsRef = useRef([])
+    const metricsRef = useRef(null)
     const scalesRef = useRef(null)
     const innerWidthRef = useRef(0)
     const clipIdRef = useRef(null)
@@ -104,6 +105,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         setIsComplete(false)
         setShowTrue(false)
         setMetrics(null)
+        metricsRef.current = null
         userPointsRef.current = []
 
         const { xScale, yScale, innerWidth, innerHeight, clipId } = createChart(
@@ -127,6 +129,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
                 () => {},
                 (drawnPoints, m) => {
                     userPointsRef.current = drawnPoints
+                    metricsRef.current = m
                     setIsComplete(true)
                     setMetrics(m)
                     // Only auto-reveal if saveEstimates is not active
@@ -156,6 +159,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         setIsComplete(false)
         setShowTrue(false)
         setMetrics(null)
+        metricsRef.current = null
         setShowComparison(false)
         clearPriorEstimates(gRef.current)
         userPointsRef.current = []
@@ -175,6 +179,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
             () => {},
             (drawnPoints, m) => {
                 userPointsRef.current = drawnPoints
+                metricsRef.current = m
                 setIsComplete(true)
                 setMetrics(m)
                 if (!saveEstimates) {
@@ -201,7 +206,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
         const yValues = pts.map(p => (typeof p === 'object' ? p.value : p) ?? 0)
 
         try {
-            await saveEstimate(contextKey, periodsSlice, yValues)
+            await saveEstimate(contextKey, periodsSlice, yValues, metricsRef.current?.inverseEuclidean ?? null)
             // On success: reveal the true line
             setShowTrue(true)
             if (gRef.current && clipIdRef.current && innerWidthRef.current) {
@@ -246,6 +251,18 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
 
     // Whether to show the submit button instead of auto-reveal
     const requiresSubmit = saveEstimates && !showTrue
+
+    // Compute percentile rank vs prior estimates when comparison is active
+    const comparisonPercentile = (() => {
+        if (!showComparison || !priorEstimates.length || metrics == null) return null
+        const myScore = metrics.inverseEuclidean
+        const priorScores = priorEstimates
+            .map(e => e.inverseEuclidean)
+            .filter(v => v != null)
+        if (!priorScores.length) return null
+        const countBelow = priorScores.filter(s => myScore > s).length
+        return Math.round((countBelow / priorScores.length) * 100)
+    })()
 
     return (
         <div className={classes.chartWrapper}>
@@ -309,6 +326,27 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
                             </span>
                         )}
                     </div>
+                    {showTrue && showComparison && comparisonPercentile != null && (
+                        <p className={classes.metricsComparison}>
+                            Your <span style={{ color: '#c0392b' }}>estimate</span> was closer to the{' '}
+                            <span style={{ color: '#276749' }}>real trend</span> than{' '}
+                            <strong>{comparisonPercentile}%</strong> of{' '}
+                            <span style={{ color: '#7c3aed' }}>other guesses</span> at this series.
+                        </p>
+                    )}
+                    {showTrue && showComparison && (
+                        <div className={classes.legend}>
+                            <span className={classes.legendItem} style={{ color: '#7c3aed' }}>
+                                ▬ Mean of others
+                            </span>
+                            <span className={classes.legendItem} style={{ color: '#d8b4fe' }}>
+                                ▬ Others&apos; estimates
+                            </span>
+                            <span className={classes.legendItem} style={{ background: '#fef9c3', border: '1px solid #b59a00', padding: '0 4px' }}>
+                                ±1 SD band
+                            </span>
+                        </div>
+                    )}
                     {saveError && (
                         <p className={classes.saveError}>
                             Failed to save estimate: {saveError.message}

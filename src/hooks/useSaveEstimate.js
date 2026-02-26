@@ -24,7 +24,7 @@ export function useSaveEstimate() {
     const [saveError, setSaveError] = useState(null)
     const [priorEstimates, setPriorEstimates] = useState([])
 
-    const saveEstimate = useCallback(async (contextKey, periodsSlice, userPoints) => {
+    const saveEstimate = useCallback(async (contextKey, periodsSlice, userPoints, inverseEuclidean) => {
         setSaving(true)
         setSaveError(null)
 
@@ -67,6 +67,7 @@ export function useSaveEstimate() {
                 user: username,
                 userid: userId,
                 date: todayString(),
+                inverseEuclidean: inverseEuclidean ?? null,
                 data,
             }
 

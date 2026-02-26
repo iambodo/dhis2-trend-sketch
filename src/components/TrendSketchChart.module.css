@@ -132,3 +132,22 @@
     justify-content: center;
     min-height: 200px;
 }
+
+.legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.legendItem {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.metricsComparison {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #212529;
+}
