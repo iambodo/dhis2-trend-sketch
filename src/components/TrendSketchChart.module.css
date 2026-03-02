@@ -47,18 +47,72 @@
 .svg {
     display: block;
     width: 100%;
+    overflow: visible;
 }
 
 .controls {
     display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 16px;
+}
+
+.metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #495057;
+}
+
+.metricsText {
+    margin: 0;
+    font-size: 13px;
+    color: #212529;
+}
+
+.metricsNumbers {
+    margin: 0;
+    font-size: 12px;
+    color: #868e96;
+}
+
+.controlsRow {
+    display: flex;
     align-items: center;
     gap: 12px;
-    padding: 8px 16px;
 }
 
 .revealNote {
     font-size: 13px;
     color: #276749;
+}
+
+.saveError {
+    margin: 0;
+    font-size: 12px;
+    color: #c0392b;
+    padding: 4px 0;
+}
+
+.compareRow {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.editPlaceholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    background: #f5f5f5;
+    color: #868e96;
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+    border-radius: 4px;
+    margin: 8px 16px;
 }
 
 .placeholder {
@@ -77,4 +131,23 @@
     align-items: center;
     justify-content: center;
     min-height: 200px;
+}
+
+.legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.legendItem {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.metricsComparison {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #212529;
 }

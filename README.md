@@ -1,3 +1,48 @@
+# DHIS2 Trend Sketch
+
+A dashboard plugin for the DHIS2 platform that tests users' intuitions about health data trends.
+
+## What it does
+
+Trend Sketch presents a line chart from any existing DHIS2 visualization, but hides the most recent periods. The user draws their expected values freehand by clicking and dragging across the hidden portion of the chart. Once the drawing is complete, the true values are revealed with a left-to-right animation, and two accuracy metrics are displayed: Euclidean distance (how far off the drawn line was in absolute terms) and Pearson correlation (how well the drawn shape matched the true trend).
+
+![Example](resources/img/trend-sketch_example1.0.gif)
+
+## Use cases
+
+- **Training and awareness**: Help health programme staff develop an intuitive sense of how their indicators are moving over time, before seeing the actual data.
+- **Data review meetings**: Use as an interactive and gamified opener, to engage teams with their own data and prompt discussion about what drove unexpected results.
+- **Forecasting calibration**: Allow analysts or managers to record their prior expectations, then compare against actuals to identify systematic biases and hidden information. Priors which are captured and encoded through the app can be used to recalibrate forecasting models.
+
+## How to use
+
+### Installation
+- Upload the app manually to your DHIS2 instance in App Management app.
+- Add the trend-sketch permission to your admin user role and user role for all dashboard end users.
+- Open and edit a dashboard. Add the plugin like any other visualization. You may configure multiple plugins separately on a single dashboard.
+
+![Example](resources/img/trend-sketch_edit1.0.png)
+
+
+### Use 
+In dashboard **edit mode**, select any saved _line visualization_ from the dropdown of the plugin. The visualization must have 3–12 periods on the x-axis, a single data dimension, and a single organisation unit. Relative periods and user org units are allowed, such as "last 6 months" or "User org unit". Use the hidden periods slider to control how many recent periods the user will draw.
+
+In dashboard **view mode**, the configuration controls are hidden and the user sees only the visible portion of the chart. They draw the remaining values freehand, then the true line is revealed along with their accuracy scores.
+
+### Save Estimates
+When in **edit mode** select "save estimates" enables comparison of estimates. 
+
+When in **view mode**, the user then clicks "submit estimate" before viewing the remaining values. Their guesses and accuracy scores are shown. When clicking "compare to others", the last 10 estimates are also plotted, along with the mean of all estimates and ± 1 SD band.
+
+All submitted estimates, along with user info and accuracy scores, are saved to the instance datastore under trend-sketch namespace and *the context scope* key, which is defined as:
+ [visualiation_id]_[orgunut_id]_[startperiod]_[endperiod]
+Thus, if a plugin is defined with user org units and/or relative periods, a different context scope is defined for every period or user org unit combination which submits data.
+
+To remove prior estimates, go to data store and delete the values submitted to datastore.
+
+
+---
+
 This project was bootstrapped with [DHIS2 Application Platform](https://github.com/dhis2/app-platform).
 
 ## Available Scripts

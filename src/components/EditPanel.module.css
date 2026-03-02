@@ -43,3 +43,10 @@
     color: #868e96;
     margin-top: 2px;
 }
+
+.toggleField {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding-bottom: 2px;
+}

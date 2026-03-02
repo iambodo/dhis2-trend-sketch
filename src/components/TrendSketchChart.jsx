@@ -1,27 +1,57 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import PropTypes from 'prop-types'
-import { Button, CircularLoader, NoticeBox } from '@dhis2/ui'
+import { Button, CircularLoader, NoticeBox, Switch } from '@dhis2/ui'
 import { useAnalyticsData } from '../hooks/useAnalyticsData'
-import { createChart, setupDrag, revealTrueLine, resetDrawing } from '../utils/drawUtils'
+import { useSaveEstimate } from '../hooks/useSaveEstimate'
+import { createChart, setupDrag, revealTrueLine, resetDrawing, plotPriorEstimates, clearPriorEstimates } from '../utils/drawUtils'
 import classes from './TrendSketchChart.module.css'
 
 const CHART_HEIGHT = 320
 const MARGIN_TOP = 20
 const MARGIN_BOTTOM = 50
 
-export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoaded }) {
+function describeMetrics({ pearson, inverseEuclidean }) {
+    const shapeDesc =
+        pearson == null ? null :
+        pearson >= 0.9 ? 'very similar in shape' :
+        pearson >= 0.7 ? 'somewhat similar in shape' :
+        pearson >= 0.4 ? 'loosely similar in shape' :
+        'quite different in shape'
+
+    const levelDesc =
+        inverseEuclidean >= 0.8 ? 'very close to the target' :
+        inverseEuclidean >= 0.5 ? 'reasonably close to the target' :
+        inverseEuclidean >= 0.2 ? 'somewhat off target' :
+        'significantly off target'
+
+    if (shapeDesc == null) {
+        return `Your estimate was ${levelDesc}.`
+    }
+
+    const connector = pearson >= 0.7 && inverseEuclidean >= 0.5 ? 'and' : 'but'
+    return `Your estimate was ${shapeDesc} to the real data, ${connector} it was ${levelDesc}.`
+}
+
+export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates, onPeriodsLoaded }) {
     const svgRef = useRef(null)
     const gRef = useRef(null)
     const containerRef = useRef(null)
     const [containerWidth, setContainerWidth] = useState(600)
     const [isComplete, setIsComplete] = useState(false)
     const [showTrue, setShowTrue] = useState(false)
+    const [metrics, setMetrics] = useState(null)
+    const [showComparison, setShowComparison] = useState(false)
+    // Store user points and metrics for submission (avoids stale closure in handleSubmit)
+    const userPointsRef = useRef([])
+    const metricsRef = useRef(null)
     const scalesRef = useRef(null)
     const innerWidthRef = useRef(0)
     const clipIdRef = useRef(null)
 
-    const { periods, values, dataLabel, title, subtitle, loading, error } =
+    const { periods, values, ouId, dataLabel, title, subtitle, yAxisRange, loading, error } =
         useAnalyticsData(vizId)
+
+    const { saveEstimate, saving, saveError, priorEstimates } = useSaveEstimate()
 
     // Notify parent of total period count
     useEffect(() => {
@@ -44,6 +74,29 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
     const drawStart = Math.max(0, periods.length - hiddenPeriods)
 
+    // Sync prior estimates overlay whenever comparison toggle or data changes
+    useEffect(() => {
+        if (!gRef.current || !scalesRef.current || !showTrue) return
+        const periodsSlice = periods.slice(drawStart)
+        const anchorPoint = drawStart > 0 && values[drawStart - 1] != null
+            ? { label: periods[drawStart - 1].label, value: values[drawStart - 1] }
+            : null
+        if (showComparison && priorEstimates.length > 0) {
+            plotPriorEstimates(gRef.current, priorEstimates, periodsSlice, scalesRef.current, anchorPoint)
+        } else {
+            clearPriorEstimates(gRef.current)
+        }
+    }, [showComparison, priorEstimates, showTrue]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Build context window key: {vizId}_{ouId}_{firstPeriodId}_{lastPeriodId}
+    function buildContextKey() {
+        if (!vizId || !ouId || !periods.length) return null
+        const firstHidden = periods[drawStart]?.id
+        const lastHidden = periods[periods.length - 1]?.id
+        if (!firstHidden || !lastHidden) return null
+        return `${vizId}_${ouId}_${firstHidden}_${lastHidden}`
+    }
+
     const buildChart = useCallback(() => {
         if (!svgRef.current || !periods.length || !values.length) return
 
@@ -51,11 +104,14 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         setIsComplete(false)
         setShowTrue(false)
+        setMetrics(null)
+        metricsRef.current = null
+        userPointsRef.current = []
 
         const { xScale, yScale, innerWidth, innerHeight, clipId } = createChart(
             svgRef.current,
             { labels, values, drawStart },
-            { width: containerWidth, height: CHART_HEIGHT }
+            { width: containerWidth, height: CHART_HEIGHT, yAxisRange }
         )
 
         clipIdRef.current = clipId
@@ -63,20 +119,28 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
         scalesRef.current = { xScale, yScale }
         innerWidthRef.current = innerWidth
 
-        setupDrag(
-            gRef.current,
-            { xScale, yScale },
-            { labels, values, drawStart },
-            innerWidth,
-            innerHeight,
-            () => {},
-            () => {
-                setIsComplete(true)
-                setShowTrue(true)
-                revealTrueLine(gRef.current, clipId, innerWidth)
-            }
-        )
-    }, [periods, values, drawStart, containerWidth])
+        if (!editMode) {
+            setupDrag(
+                gRef.current,
+                { xScale, yScale },
+                { labels, values, drawStart },
+                innerWidth,
+                innerHeight,
+                () => {},
+                (drawnPoints, m) => {
+                    userPointsRef.current = drawnPoints
+                    metricsRef.current = m
+                    setIsComplete(true)
+                    setMetrics(m)
+                    // Only auto-reveal if saveEstimates is not active
+                    if (!saveEstimates) {
+                        setShowTrue(true)
+                        revealTrueLine(gRef.current, clipId, innerWidth)
+                    }
+                }
+            )
+        }
+    }, [periods, values, drawStart, containerWidth, yAxisRange, saveEstimates, editMode])
 
     useEffect(() => {
         buildChart()
@@ -87,7 +151,6 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         resetDrawing(gRef.current)
 
-        // Re-hide the clip rect
         if (clipIdRef.current) {
             const clipRect = gRef.current.querySelector(`#${clipIdRef.current} rect`)
             if (clipRect) clipRect.setAttribute('width', '0')
@@ -95,6 +158,11 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
 
         setIsComplete(false)
         setShowTrue(false)
+        setMetrics(null)
+        metricsRef.current = null
+        setShowComparison(false)
+        clearPriorEstimates(gRef.current)
+        userPointsRef.current = []
 
         const labels = periods.map(p => p.label)
         const { xScale, yScale } = scalesRef.current
@@ -109,20 +177,50 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
             innerWidth,
             innerHeight,
             () => {},
-            () => {
+            (drawnPoints, m) => {
+                userPointsRef.current = drawnPoints
+                metricsRef.current = m
                 setIsComplete(true)
-                setShowTrue(true)
-                revealTrueLine(gRef.current, clipId, innerWidth)
+                setMetrics(m)
+                if (!saveEstimates) {
+                    setShowTrue(true)
+                    revealTrueLine(gRef.current, clipId, innerWidth)
+                }
             }
         )
-    }, [periods, values, drawStart])
+    }, [periods, values, drawStart, saveEstimates])
+
+    const handleSubmit = useCallback(async () => {
+        const contextKey = buildContextKey()
+        if (!contextKey) return
+
+        const periodsSlice = periods.slice(drawStart)
+        const pts = userPointsRef.current
+
+        // Guard: ensure all periods are filled
+        if (!pts || pts.length < periodsSlice.length) {
+            return
+        }
+
+        // Extract numeric values from the point objects { label, value, x }
+        const yValues = pts.map(p => (typeof p === 'object' ? p.value : p) ?? 0)
+
+        try {
+            await saveEstimate(contextKey, periodsSlice, yValues, metricsRef.current?.inverseEuclidean ?? null)
+            // On success: reveal the true line
+            setShowTrue(true)
+            if (gRef.current && clipIdRef.current && innerWidthRef.current) {
+                revealTrueLine(gRef.current, clipIdRef.current, innerWidthRef.current)
+            }
+        } catch {
+            // saveError state is set inside useSaveEstimate
+        }
+    }, [periods, drawStart, ouId, vizId, saveEstimate]) // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!vizId) {
         return (
-            <div className={classes.placeholder}>
-                {editMode
-                    ? 'Select a visualization to get started.'
-                    : 'No visualization configured. Switch to edit mode to set one up.'}
+            <div className={classes.editPlaceholder}>
+                Edit dashboard to select a single series line graph for trend sketching.
             </div>
         )
     }
@@ -151,12 +249,31 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
         )
     }
 
+    // Whether to show the submit button instead of auto-reveal
+    const requiresSubmit = saveEstimates && !showTrue
+
+    // Compute percentile rank vs prior estimates when comparison is active
+    const comparisonPercentile = (() => {
+        if (!showComparison || !priorEstimates.length || metrics == null) return null
+        const myScore = metrics.inverseEuclidean
+        const priorScores = priorEstimates
+            .map(e => e.inverseEuclidean)
+            .filter(v => v != null)
+        if (!priorScores.length) return null
+        const countBelow = priorScores.filter(s => myScore > s).length
+        return Math.round((countBelow / priorScores.length) * 100)
+    })()
+
     return (
         <div className={classes.chartWrapper}>
             <div className={classes.chartMeta}>
                 {title && <h3 className={classes.title}>{title}</h3>}
                 {subtitle && <span className={classes.subtitle}>{subtitle}</span>}
                 {dataLabel && <span className={classes.dataLabel}>{dataLabel}</span>}
+            </div>
+
+            <div ref={containerRef} className={classes.svgContainer}>
+                <svg ref={svgRef} className={classes.svg} />
             </div>
 
             {!editMode && !isComplete && hiddenPeriods > 0 && (
@@ -166,19 +283,74 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, onPeriodsLoad
                 </div>
             )}
 
-            <div ref={containerRef} className={classes.svgContainer}>
-                <svg ref={svgRef} className={classes.svg} />
-            </div>
-
             {isComplete && (
                 <div className={classes.controls}>
-                    <Button onClick={handleReset} secondary small>
-                        Reset drawing
-                    </Button>
-                    {showTrue && (
-                        <span className={classes.revealNote}>
-                            True values revealed.
-                        </span>
+                    {metrics && (!saveEstimates || showTrue) && (
+                        <div className={classes.metrics}>
+                            <p className={classes.metricsText}>
+                                {describeMetrics(metrics)}
+                            </p>
+                            <p className={classes.metricsNumbers}>
+                                Pearson correlation: <strong>{metrics.pearson != null ? metrics.pearson.toPrecision(2) : 'n/a'}</strong>
+                                {' · '}
+                                Inverse Euclidean distance: <strong>{metrics.inverseEuclidean.toPrecision(2)}</strong>
+                            </p>
+                        </div>
+                    )}
+                    <div className={classes.controlsRow}>
+                        {requiresSubmit && (
+                            <Button
+                                onClick={handleSubmit}
+                                primary
+                                small
+                                loading={saving}
+                                disabled={saving}
+                            >
+                                Submit estimate
+                            </Button>
+                        )}
+                        {showTrue && priorEstimates.length > 0 && (
+                            <Switch
+                                label="Compare to others"
+                                checked={showComparison}
+                                onChange={({ checked }) => setShowComparison(checked)}
+                                dense
+                            />
+                        )}
+                        <Button onClick={handleReset} secondary small>
+                            Reset drawing
+                        </Button>
+                        {showTrue && (
+                            <span className={classes.revealNote}>
+                                True values revealed.
+                            </span>
+                        )}
+                    </div>
+                    {showTrue && showComparison && comparisonPercentile != null && (
+                        <p className={classes.metricsComparison}>
+                            Your <span style={{ color: '#c0392b' }}>estimate</span> was closer to the{' '}
+                            <span style={{ color: '#276749' }}>real trend</span> than{' '}
+                            <strong>{comparisonPercentile}%</strong> of{' '}
+                            <span style={{ color: '#7c3aed' }}>other guesses</span> at this series.
+                        </p>
+                    )}
+                    {showTrue && showComparison && (
+                        <div className={classes.legend}>
+                            <span className={classes.legendItem} style={{ color: '#7c3aed' }}>
+                                ▬ Mean of others
+                            </span>
+                            <span className={classes.legendItem} style={{ color: '#d8b4fe' }}>
+                                ▬ Others&apos; estimates
+                            </span>
+                            <span className={classes.legendItem} style={{ background: '#fef9c3', border: '1px solid #b59a00', padding: '0 4px' }}>
+                                ±1 SD band
+                            </span>
+                        </div>
+                    )}
+                    {saveError && (
+                        <p className={classes.saveError}>
+                            Failed to save estimate: {saveError.message}
+                        </p>
                     )}
                 </div>
             )}
@@ -190,9 +362,11 @@ TrendSketchChart.propTypes = {
     vizId: PropTypes.string,
     hiddenPeriods: PropTypes.number.isRequired,
     editMode: PropTypes.bool,
+    saveEstimates: PropTypes.bool,
     onPeriodsLoaded: PropTypes.func,
 }
 
 TrendSketchChart.defaultProps = {
     editMode: false,
+    saveEstimates: true,
 }
