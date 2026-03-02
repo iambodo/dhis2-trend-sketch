@@ -292,6 +292,8 @@ export function setupDrag(gEl, scales, data, innerWidth, innerHeight, onUpdate, 
                 .attr('text-anchor', 'start')
                 .style('font-size', '11px')
                 .style('fill', '#c05621')
+                .style('pointer-events', 'none')
+                .style('user-select', 'none')
                 .text(formatValue(last.value))
         }
     }
