@@ -6,7 +6,7 @@ A dashboard plugin for the DHIS2 platform that tests users' intuitions about hea
 
 Trend Sketch presents a line chart from any existing DHIS2 visualization, but hides the most recent periods. The user draws their expected values freehand by clicking and dragging across the hidden portion of the chart. Once the drawing is complete, the true values are revealed with a left-to-right animation, and two accuracy metrics are displayed: Euclidean distance (how far off the drawn line was in absolute terms) and Pearson correlation (how well the drawn shape matched the true trend).
 
-![Example](resources/img/trend-sketch_example1.0.gif)
+![Example](resources/img/trend-sketch_example2.0.gif)
 
 ## Use cases
 
