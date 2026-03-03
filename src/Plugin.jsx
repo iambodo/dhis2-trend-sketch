@@ -3,31 +3,9 @@ import PropTypes from 'prop-types'
 import { EditPanel } from './components/EditPanel'
 import { TrendSketchChart } from './components/TrendSketchChart'
 import { useDatastoreNamespace } from './hooks/useDatastoreNamespace'
+import { usePluginConfig } from './hooks/usePluginConfig'
 import classes from './Plugin.module.css'
 import './locales'
-
-const STORAGE_KEY_PREFIX = 'dhis2-trend-sketch-'
-const DEV_FALLBACK_KEY = 'dhis2-trend-sketch-dev'
-
-// Config is stored in localStorage keyed by dashboardItemId (a stable unique ID
-// provided by the DHIS2 dashboard per plugin instance). In dev mode (no dashboard
-// context), a fixed fallback key is used since there is only one instance.
-function readLocalCache(key) {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key)
-        return raw ? JSON.parse(raw) : null
-    } catch {
-        return null
-    }
-}
-
-function writeLocalCache(key, data) {
-    try {
-        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(data))
-    } catch {
-        // ignore
-    }
-}
 
 const DEFAULT_VIZ_ID = 'NxyEVic2BOh'
 const DEFAULT_HIDDEN_PERIODS = 3
@@ -37,10 +15,6 @@ function Plugin({ dashboardItemId, dashboardMode }) {
     const noContext = dashboardMode == null
     const editMode = dashboardMode === 'edit'
 
-    // Use dashboardItemId as the storage key when available; fall back to a
-    // fixed dev key when running outside a real dashboard context.
-    const storageKey = dashboardItemId ?? DEV_FALLBACK_KEY
-
     const [selectedVizId, setSelectedVizId] = useState(noContext ? DEFAULT_VIZ_ID : null)
     const [hiddenPeriods, setHiddenPeriods] = useState(noContext ? DEFAULT_HIDDEN_PERIODS : 3)
     const [saveEstimates, setSaveEstimates] = useState(true)
@@ -48,29 +22,33 @@ function Plugin({ dashboardItemId, dashboardMode }) {
 
     const { exists: datastoreExists } = useDatastoreNamespace('trend-sketch')
 
-    // Restore saved config from localStorage on mount
+    // Config is stored in the DHIS2 datastore, keyed by dashboardItemId so each
+    // plugin instance on a dashboard persists its own settings independently.
+    // In dev mode (no dashboardItemId), falls back to 'dev' as the key.
+    const { config, loading: configLoading, saveConfig } = usePluginConfig(dashboardItemId ?? 'dev')
+
+    // Apply loaded config to state once available
     useEffect(() => {
-        if (noContext) return
-        const cached = readLocalCache(storageKey)
-        if (cached?.selectedVizId) setSelectedVizId(cached.selectedVizId)
-        if (cached?.hiddenPeriods != null) setHiddenPeriods(cached.hiddenPeriods)
-        if (cached?.saveEstimates != null) setSaveEstimates(cached.saveEstimates)
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+        if (configLoading || !config) return
+        if (config.selectedVizId) setSelectedVizId(config.selectedVizId)
+        if (config.hiddenPeriods != null) setHiddenPeriods(config.hiddenPeriods)
+        if (config.saveEstimates != null) setSaveEstimates(config.saveEstimates)
+    }, [configLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
     function handleVizChange(vizId) {
         setSelectedVizId(vizId)
         setHiddenPeriods(3)
-        writeLocalCache(storageKey, { selectedVizId: vizId, hiddenPeriods: 3, saveEstimates })
+        saveConfig({ selectedVizId: vizId, hiddenPeriods: 3, saveEstimates })
     }
 
     function handleHiddenPeriodsChange(value) {
         setHiddenPeriods(value)
-        writeLocalCache(storageKey, { selectedVizId, hiddenPeriods: value, saveEstimates })
+        saveConfig({ selectedVizId, hiddenPeriods: value, saveEstimates })
     }
 
     function handleSaveEstimatesChange(value) {
         setSaveEstimates(value)
-        writeLocalCache(storageKey, { selectedVizId, hiddenPeriods, saveEstimates: value })
+        saveConfig({ selectedVizId, hiddenPeriods, saveEstimates: value })
     }
 
     return (
