@@ -20,7 +20,7 @@ function describeMetrics({ pearson, inverseEuclidean }) {
 
     const levelDesc =
         inverseEuclidean >= 0.8 ? 'very close to the target' :
-        inverseEuclidean >= 0.5 ? 'reasonably close to the target' :
+        inverseEuclidean >= 0.4 ? 'reasonably close to the target' :
         inverseEuclidean >= 0.2 ? 'somewhat off target' :
         'significantly off target'
 
@@ -328,7 +328,7 @@ export function TrendSketchChart({ vizId, hiddenPeriods, editMode, saveEstimates
                     </div>
                     {showTrue && showComparison && comparisonPercentile != null && (
                         <p className={classes.metricsComparison}>
-                            Your <span style={{ color: '#c0392b' }}>estimate</span> was closer to the{' '}
+                            <span style={{ color: '#c0392b' }}>Your estimate</span> was closer to the{' '}
                             <span style={{ color: '#276749' }}>real trend</span> than{' '}
                             <strong>{comparisonPercentile}%</strong> of{' '}
                             <span style={{ color: '#7c3aed' }}>other guesses</span> at this series.
